@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Extremadura en Datos</title>
+  <link rel="stylesheet" href="css/styles.css">
+  <!-- Cargar Chart.js desde CDN -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <!-- Iconos de Font Awesome para botones de redes sociales -->
+  <script src="https://kit.fontawesome.com/5d1dce8e4b.js" crossorigin="anonymous"></script>
+</head>
+<body>
+  <header>
+    <h1>Extremadura en Datos</h1>
+    <p>Portal informativo que ofrece la evolución de indicadores económicos y sociales de la Comunidad Autónoma de Extremadura.  Selecciona un indicador para visualizar su serie histórica.</p>
+  </header>
+  <main>
+    <div class="selector-container">
+      <label for="dataset-select">Indicador:</label>
+      <select id="dataset-select"></select>
+    </div>
+    <div class="chart-container">
+      <canvas id="chart-canvas"></canvas>
+    </div>
+    <div class="share-container">
+      <span>Compartir:</span>
+      <a id="share-linkedin" class="share-button" title="Compartir en LinkedIn" target="_blank"><i class="fab fa-linkedin"></i></a>
+      <a id="share-facebook" class="share-button" title="Compartir en Facebook" target="_blank"><i class="fab fa-facebook"></i></a>
+      <a id="share-whatsapp" class="share-button" title="Compartir en WhatsApp" target="_blank"><i class="fab fa-whatsapp"></i></a>
+      <a id="share-x" class="share-button" title="Compartir en X" target="_blank"><i class="fab fa-x-twitter"></i></a>
+    </div>
+  </main>
+  <footer>
+    <p>Fuente de datos: Instituto Nacional de Estadística (INE).  Los datos se actualizan automáticamente a partir del servicio <em>wstempus</em>【293243866024462†L33-L45】.</p>
+  </footer>
+  <!-- Cargar configuraciones y funciones -->
+  <script src="js/datasets.js"></script>
+  <script src="js/charts.js"></script>
+  <script>
+    // Inicializar la página una vez que los scripts estén cargados
+    document.addEventListener('DOMContentLoaded', () => {
+      initDatasetSelector();
+      // Actualizar enlaces de compartición cuando cambie el hash
+      function updateShareLinks() {
+        const url = window.location.href;
+        const text = document.getElementById('dataset-select').selectedOptions[0]?.dataset.metric || 'Extremadura en Datos';
+        document.getElementById('share-linkedin').href = `https://www.linkedin.com/shareArticle?mini=true&url=${encodeURIComponent(url)}&title=${encodeURIComponent(text)}`;
+        document.getElementById('share-facebook').href = `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(url)}`;
+        document.getElementById('share-whatsapp').href = `https://wa.me/?text=${encodeURIComponent(text + ' ' + url)}`;
+        document.getElementById('share-x').href = `https://twitter.com/intent/tweet?url=${encodeURIComponent(url)}&text=${encodeURIComponent(text)}`;
+      }
+      // Llamar inicialmente y cuando se cambie el indicador
+      updateShareLinks();
+      document.getElementById('dataset-select').addEventListener('change', updateShareLinks);
+    });
+  </script>
+</body>
+</html>
