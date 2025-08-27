@@ -2,7 +2,7 @@ name: Actualiza datos INE y publica JSON en docs/data
 
 on:
   schedule:
-    - cron: "0 6 * * *"   # cada día 06:00 UTC
+    - cron: "0 6 * * *"     # cada día 06:00 UTC
   workflow_dispatch:
 
 jobs:
@@ -24,37 +24,52 @@ jobs:
           pip install -r requirements.txt
 
       - name: Ejecutar actualización (descarga INE + limpieza)
+        env:
+          PYTHONPATH: ./scripts   # por si tu update_data.py hace `from ine_api import ...`
         run: |
+          set -e
           python scripts/update_data.py --excel "Datos Extremadura Mensual.xlsx"
 
-      # --- NUEVO: ver qué se ha generado
+      # DEPURACIÓN: listar árbol completo
       - name: Listar ficheros generados (debug)
         run: |
-          echo "== Contenido de data/ y docs/ =="
+          echo "== Árbol del repo tras generar =="
           ls -R
 
-      # --- NUEVO: copiar JSON a docs/data para la web
+      # COMPROBACIÓN: asegurar que existen JSON en data/processed
+      - name: Verificar JSON generados
+        run: |
+          echo "== Lista de JSON en data/processed =="
+          ls -l data/processed || true
+          COUNT=$(ls data/processed/*.json 2>/dev/null | wc -l | xargs)
+          if [ "$COUNT" = "0" ] || [ -z "$COUNT" ]; then
+            echo "::error::No se han generado JSON en data/processed"
+            exit 1
+          fi
+          echo "OK: $COUNT JSON encontrados."
+
+      # COPIA: llevar JSON a docs/data (lo que sirve Pages)
       - name: Copiar JSON a docs/data
         run: |
+          set -e
           mkdir -p docs/data
-          cp -f data/processed/*.json docs/data/ || true
+          cp -f data/processed/*.json docs/data/
           echo "== Contenido de docs/data =="
-          ls -l docs/data || true
+          ls -l docs/data
 
-      # --- NUEVO: subir un artefacto con los JSON (para inspección rápida)
-      - name: Upload JSON artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: json-output
-          path: |
-            data/processed/*.json
-            docs/data/*.json
+      # COMMIT: confirmar que hay cambios y subirlos
+      - name: Mostrar estado git antes de commit
+        run: |
+          git status --porcelain
+          echo "--- fin status ---"
 
-      # Commit automático de los JSON (en data/processed y docs/data)
-      - name: Commit automático de los JSON
+      - name: Commit automático de JSON y /docs
         uses: stefanzweifel/git-auto-commit-action@v5
         with:
-          commit_message: "chore: actualización diaria de datos INE"
+          commit_message: "chore: publicar web en /docs y actualizar JSON"
           file_pattern: |
             data/processed/*.json
             docs/data/*.json
+            docs/index.html
+            docs/css/**
+            docs/js/**
