@@ -2,7 +2,7 @@ name: Actualiza datos INE y publica JSON en docs/data
 
 on:
   schedule:
-    - cron: "0 6 * * *"
+    - cron: "0 6 * * *"   # cada día 06:00 UTC
   workflow_dispatch:
 
 jobs:
@@ -23,14 +23,38 @@ jobs:
         run: |
           pip install -r extremadura_en_datos/requirements.txt
 
-      - name: Ejecutar actualización
+      - name: Ejecutar actualización (descarga INE + limpieza)
         run: |
-          python extremadura_en_datos/scripts/update_data.py --excel "Datos Extremadura Mensual.xlsx"
+          python extremadura_en_datos/scripts/update_data.py --excel "extremadura_en_datos/Datos Extremadura Mensual.xlsx"
 
+      # --- NUEVO: ver qué se ha generado
+      - name: Listar ficheros generados (debug)
+        run: |
+          echo "== Contenido de data/ y docs/ =="
+          ls -R
+
+      # --- NUEVO: copiar JSON a docs/data para la web
+      - name: Copiar JSON a docs/data
+        run: |
+          mkdir -p docs/data
+          cp -f data/processed/*.json docs/data/ || true
+          echo "== Contenido de docs/data =="
+          ls -l docs/data || true
+
+      # --- NUEVO: subir un artefacto con los JSON (para inspección rápida)
+      - name: Upload JSON artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: json-output
+          path: |
+            data/processed/*.json
+            docs/data/*.json
+
+      # Commit automático de los JSON (en data/processed y docs/data)
       - name: Commit automático de los JSON
         uses: stefanzweifel/git-auto-commit-action@v5
         with:
           commit_message: "chore: actualización diaria de datos INE"
           file_pattern: |
-            docs/data/*.json
             data/processed/*.json
+            docs/data/*.json
