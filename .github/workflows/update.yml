@@ -1,0 +1,36 @@
+name: Actualiza datos INE y publica JSON en docs/data
+
+on:
+  schedule:
+    - cron: "0 6 * * *"
+  workflow_dispatch:
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configurar Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Instalar dependencias
+        run: |
+          pip install -r extremadura_en_datos/requirements.txt
+
+      - name: Ejecutar actualización
+        run: |
+          python extremadura_en_datos/scripts/update_data.py --excel "Datos Extremadura Mensual.xlsx"
+
+      - name: Commit automático de los JSON
+        uses: stefanzweifel/git-auto-commit-action@v5
+        with:
+          commit_message: "chore: actualización diaria de datos INE"
+          file_pattern: |
+            docs/data/*.json
+            data/processed/*.json
