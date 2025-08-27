@@ -21,11 +21,11 @@ jobs:
 
       - name: Instalar dependencias
         run: |
-          pip install -r extremadura_en_datos/requirements.txt
+          pip install -r requirements.txt
 
       - name: Ejecutar actualización (descarga INE + limpieza)
         run: |
-          python extremadura_en_datos/scripts/update_data.py --excel "Datos Extremadura Mensual.xlsx"
+          python scripts/update_data.py --excel "Datos Extremadura Mensual.xlsx"
 
       # --- NUEVO: ver qué se ha generado
       - name: Listar ficheros generados (debug)
