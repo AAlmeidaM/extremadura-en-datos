@@ -25,7 +25,7 @@ jobs:
 
       - name: Ejecutar actualización (descarga INE + limpieza)
         run: |
-          python extremadura_en_datos/scripts/update_data.py --excel "extremadura_en_datos/Datos Extremadura Mensual.xlsx"
+          python extremadura_en_datos/scripts/update_data.py --excel "Datos Extremadura Mensual.xlsx"
 
       # --- NUEVO: ver qué se ha generado
       - name: Listar ficheros generados (debug)
