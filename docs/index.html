@@ -1,88 +1,21 @@
 <!doctype html>
 <html lang="es">
 <head>
-  <meta charset="utf-8">
-  <title>Extremadura en Datos</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-  <style>
-    body { font-family: system-ui, Arial, sans-serif; margin: 24px; }
-    header { margin-bottom: 16px; }
-    .row { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
-    canvas { max-width: 1000px; width: 100%; }
-    small { color: #666; }
-  </style>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Extremadura en Datos · Industria y Empresa</title>
+<style>
+body{font-family:system-ui,Arial;margin:24px;background:#f7f9fc;color:#111}
+h1{margin:0 0 8px 0} p{margin:4px 0 16px 0;color:#475569}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:18px}
+.card{background:#fff;border:1px solid #e5e7eb;border-radius:16px;box-shadow:0 1px 3px rgba(0,0,0,.04);overflow:hidden}
+.card img{width:100%;display:block}
+.t{padding:10px 12px;color:#475569}
+</style>
 </head>
 <body>
-  <header>
-    <h1>Extremadura en Datos</h1>
-    <p><small>Los datos se cargan desde <code>./data/&lt;id&gt;.json</code>. Cada JSON tiene claves <code>period</code> y <code>value</code>.</small></p>
-  </header>
-
-  <div class="row">
-    <label for="tabla">ID de tabla INE:</label>
-    <input id="tabla" value="50913" />
-    <button id="btn">Cargar</button>
-  </div>
-
-  <p id="status"></p>
-  <canvas id="grafico" height="120"></canvas>
-
-  <script>
-    const $status = document.getElementById('status');
-    const ctx = document.getElementById('grafico').getContext('2d');
-    let chart;
-
-    async function cargar(id) {
-      const url = `./data/${id}.json`; // RUTA RELATIVA
-      $status.textContent = `Cargando ${url} …`;
-      const res = await fetch(url);
-      if (!res.ok) throw new Error(`No se pudo cargar ${url} (status ${res.status})`);
-      const data = await res.json();
-
-      if (!Array.isArray(data) || data.length === 0) {
-        throw new Error('JSON vacío o no es un array');
-      }
-
-      // Orden simple por periodo (alfabético suele valer; si prefieres, parsea YYYY-MM)
-      data.sort((a, b) => ('' + a.period).localeCompare('' + b.period));
-
-      const labels = data.map(d => d.period);
-      const values = data.map(d => d.value);
-
-      if (chart) chart.destroy();
-      chart = new Chart(ctx, {
-        type: 'line',
-        data: {
-          labels,
-          datasets: [
-            { label: `Tabla ${id}`, data: values, borderColor: '#0a7', backgroundColor: 'rgba(0,170,119,.1)', tension: .2, pointRadius: 0 }
-          ]
-        },
-        options: {
-          responsive: true,
-          scales: { y: { beginAtZero: false } },
-          plugins: { legend: { display: true } }
-        }
-      });
-      $status.textContent = `OK: ${data.length} registros de ${id}`;
-    }
-
-    document.getElementById('btn').onclick = () => {
-      const id = document.getElementById('tabla').value.trim();
-      if (!id) return alert('Escribe un ID de tabla (ej. 50913)');
-      cargar(id).catch(err => {
-        console.error(err);
-        $status.textContent = `Error al cargar los datos de la tabla ${id}`;
-        alert($status.textContent);
-      });
-    };
-
-    // Cargar uno por defecto al abrir
-    cargar('50913').catch(err => {
-      console.error(err);
-      $status.textContent = `Error al cargar los datos de la tabla 50913`;
-    });
-  </script>
-</body>
-</html>
+<h1>Industria y Empresa</h1>
+<p>Último valor y variación % vs periodo anterior (tarjetas generadas automáticamente).</p>
+<div class="grid">
+<p>No se generaron tarjetas (¿faltan JSON en docs/data o no hay tablas de esa categoría?).</p>
+</div>
+</body></html>
