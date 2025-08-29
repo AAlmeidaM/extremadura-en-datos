@@ -1,48 +1,44 @@
 # scripts/make_cards.py
-# Genera tarjetas PNG (cards) por indicador SOLO de la categoría "Industria y Empresa"
-# usando los JSON ya generados en docs/data/<id>.json y los metadatos del Excel.
+# Genera tarjetas PNG (cards) con último valor y variación % del periodo anterior.
+# PRIORIDAD: solo "Industria y Empresa"; si no encuentra, usa TODOS los JSON de docs/data.
 
 import json
 import math
 import os
 import re
+import unicodedata
 from pathlib import Path
 from datetime import datetime
 
 import pandas as pd
 from PIL import Image, ImageDraw, ImageFont
 
-# === Configuración básica ===
-EXCEL_PATH = "Datos Extremadura Mensual.xlsx"  # mismo que usa el workflow
-DOCS_DATA = Path("docs/data")
-OUT_DIR   = Path("docs/cards")
-OUT_DIR.mkdir(parents=True, exist_ok=True)
+EXCEL_PATH = "Datos Extremadura Mensual.xlsx"
+DOCS_DATA  = Path("docs/data")
+CARDS_DIR  = Path("docs/cards")
+CARDS_DIR.mkdir(parents=True, exist_ok=True)
 
-# Fuentes: usaremos las fuentes por defecto del sistema del runner
-# Si no encuentra TTF, PIL usa una básica. Puedes cambiar por fuentes propias si quieres.
 def _load_font(size=32):
     try:
         return ImageFont.truetype("DejaVuSans.ttf", size)
-    except:
+    except Exception:
         return ImageFont.load_default()
 
 FONT_T = _load_font(42)   # título
 FONT_V = _load_font(68)   # valor
 FONT_S = _load_font(28)   # secundarios
 
-# === Utilidades ===
 def normalize_period(p):
-    """Devuelve 'YYYY-MM' a partir de formatos varios."""
     if isinstance(p, (pd.Timestamp, datetime)):
         return p.strftime("%Y-%m")
     s = str(p).strip()
-    m = re.match(r"^(\d{4})\s*[Mm]\s*(\d{1,2})$", s)           # 2024M01
+    m = re.match(r"^(\d{4})\s*[Mm]\s*(\d{1,2})$", s)
     if m: return f"{int(m.group(1)):04d}-{int(m.group(2)):02d}"
-    m = re.match(r"^(\d{1,2})[/-](\d{4})$", s)                 # 01/2024
+    m = re.match(r"^(\d{1,2})[/-](\d{4})$", s)
     if m: return f"{int(m.group(2)):04d}-{int(m.group(1)):02d}"
-    m = re.match(r"^(\d{4})[/-](\d{1,2})$", s)                 # 2024/01
+    m = re.match(r"^(\d{4})[/-](\d{1,2})$", s)
     if m: return f"{int(m.group(1)):04d}-{int(m.group(2)):02d}"
-    m = re.match(r"^(\d{4})-(\d{2})-(\d{2})$", s)              # 2024-01-31
+    m = re.match(r"^(\d{4})-(\d{2})-(\d{2})$", s)
     if m: return f"{m.group(1)}-{m.group(2)}"
     try:
         dt = pd.to_datetime(s, errors="raise", dayfirst=True)
@@ -58,7 +54,6 @@ def to_float(x):
     s = str(x).strip()
     if s == "" or s.lower() in {"nan", "na", "none"}:
         return None
-    # quita miles y cambia coma a punto
     s = s.replace(".", "").replace(",", ".")
     try:
         return float(s)
@@ -66,7 +61,6 @@ def to_float(x):
         return None
 
 def pct_change(a, b):
-    """(a - b) / b * 100 en %, con control de cero."""
     if b is None or b == 0 or a is None:
         return None
     return (a - b) / b * 100.0
@@ -77,87 +71,107 @@ def read_json_records(table_id):
         return None
     with open(f, "r", encoding="utf-8") as fh:
         data = json.load(fh)
-    # Normalizamos un poco por si acaso
     for d in data:
         d["period"] = normalize_period(d.get("period"))
         d["value"]  = to_float(d.get("value"))
-    # quitamos nulos
     data = [d for d in data if d.get("value") is not None and d.get("period")]
-    # orden por periodo
     data.sort(key=lambda x: x["period"])
     return data
 
-# === Generador de tarjeta ===
 def draw_card(title, last_period, last_value, delta_pct, outfile):
     W, H = 1000, 560
-    card = Image.new("RGB", (W, H), (247, 249, 252))  # fondo suave
-    draw = ImageDraw.Draw(card)
-
-    # tarjeta con borde
+    img = Image.new("RGB", (W, H), (247, 249, 252))
+    d = ImageDraw.Draw(img)
     margin = 24
-    draw.rounded_rectangle([margin, margin, W - margin, H - margin], radius=24, fill="white", outline=(225, 230, 236), width=2)
+    d.rounded_rectangle([margin, margin, W - margin, H - margin],
+                        radius=24, fill="white", outline=(225,230,236), width=2)
+    d.text((margin + 32, margin + 24), title[:70], font=FONT_T, fill=(30,41,59))
 
-    # título
-    draw.text((margin + 32, margin + 24), title, font=FONT_T, fill=(30, 41, 59))
+    val_text = f"{last_value:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+    d.text((margin + 32, margin + 120), val_text, font=FONT_V, fill=(9,105,218))
 
-    # valor principal
-    val_text = f"{last_value:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")  # formateo con coma decimal
-    draw.text((margin + 32, margin + 120), val_text, font=FONT_V, fill=(9, 105, 218))
+    d.text((margin + 32, margin + 210), f"Periodo: {last_period}", font=FONT_S, fill=(71,85,105))
 
-    # periodo
-    draw.text((margin + 32, margin + 210), f"Periodo: {last_period}", font=FONT_S, fill=(71, 85, 105))
-
-    # delta
     if delta_pct is not None:
-        color = (16, 185, 129) if delta_pct >= 0 else (239, 68, 68)  # verde/rojo
+        color = (16,185,129) if delta_pct >= 0 else (239,68,68)
         signo = "▲" if delta_pct >= 0 else "▼"
         delta_text = f"{signo} {delta_pct:.2f}% vs periodo anterior"
     else:
-        color = (148, 163, 184)
+        color = (148,163,184)
         delta_text = "s/d (sin dato anterior)"
-    draw.text((margin + 32, margin + 270), delta_text, font=FONT_S, fill=color)
+    d.text((margin + 32, margin + 270), delta_text, font=FONT_S, fill=color)
 
-    # pie
-    draw.text((margin + 32, H - margin - 36), "Extremadura en Datos · Industria y Empresa", font=FONT_S, fill=(100, 116, 139))
+    d.text((margin + 32, H - margin - 36),
+           "Extremadura en Datos · Industria y Empresa",
+           font=FONT_S, fill=(100,116,139))
+    img.save(outfile, "PNG")
 
-    card.save(outfile, "PNG")
+def normalize_text(s):
+    s = str(s or "")
+    s = unicodedata.normalize("NFKD", s).encode("ascii", "ignore").decode("ascii")
+    return s.lower().strip()
 
-def main():
-    # 1) Leer Excel y quedarnos con INDUSTRIA Y EMPRESA
-    df = pd.read_excel(EXCEL_PATH, header=2)
-    def extract_id(u: str) -> str:
+def ids_from_excel(excel_path):
+    if not Path(excel_path).exists():
+        print(f"[WARN] Excel no encontrado: {excel_path}. Se usará fallback por JSON.")
+        return []
+    df = pd.read_excel(excel_path, header=2)
+    def extrae_id(u):
         if not isinstance(u, str): return ""
         m = re.search(r"t=(\d+)", u)
         return m.group(1) if m else ""
-    df["table_id"] = df["URL"].apply(extract_id)
+    df["table_id"] = df["URL"].apply(extrae_id)
+    df = df[df["table_id"].astype(bool)]
 
-    # Filtrar categoría (ajusta el texto exacto si en tu Excel está con otras mayúsculas/acentos)
-    mask = df["Categoría"].astype(str).str.strip().str.lower().eq("Industria y Empresa")
-    df_ie = df.loc[mask & df["table_id"].astype(bool), ["table_id", "Métricas"]].drop_duplicates()
+    # Filtrado robusto por categoría ("industria" en cualquier parte)
+    cat = df["Categoría"].apply(normalize_text)
+    mask = cat.str.contains(r"\bindustria\b")
+    df_ie = df.loc[mask, ["table_id", "Métricas"]].drop_duplicates()
+    ids = [(str(r["table_id"]), str(r["Métricas"])) for _, r in df_ie.iterrows()]
+    print(f"[INFO] IDs Industria y Empresa encontrados en Excel: {len(ids)}")
+    if len(ids) < 1:
+        print("[WARN] Excel sin coincidencias. Se usará fallback: todos los JSON presentes en docs/data/")
+    return ids
 
-    generated = 0
-    for _, row in df_ie.iterrows():
-        tid = str(row["table_id"])
-        title = str(row["Métricas"]).strip() or f"Tabla {tid}"
+def fallback_ids_from_json():
+    ids = []
+    for f in sorted(DOCS_DATA.glob("*.json")):
+        ids.append((f.stem, f"Tabla {f.stem}"))
+    print(f"[INFO] Fallback por JSON: {len(ids)} ids")
+    return ids
+
+def main():
+    ids = ids_from_excel(EXCEL_PATH)
+    if not ids:
+        ids = fallback_ids_from_json()
+
+    generadas = 0
+    for tid, title in ids:
         data = read_json_records(tid)
-        if not data or len(data) == 0:
+        if not data:
+            print(f"[WARN] No hay datos en docs/data/{tid}.json. Se omite.")
             continue
         last = data[-1]
         prev = data[-2] if len(data) >= 2 else None
         last_val = to_float(last.get("value"))
         prev_val = to_float(prev.get("value")) if prev else None
+        if last_val is None:
+            print(f"[WARN] Último valor no numérico para {tid}. Se omite.")
+            continue
         delta = pct_change(last_val, prev_val)
 
-        out = OUT_DIR / f"{tid}.png"
-        draw_card(title, last.get("period"), last_val, delta, out)
-        generated += 1
+        outfile = CARDS_DIR / f"{tid}.png"
+        draw_card(title or f"Tabla {tid}", last.get("period"), last_val, delta, outfile)
+        print(f"[OK] Generada tarjeta {outfile.name}")
+        generadas += 1
 
-    # índice simple con las tarjetas
+    # Generar index con las tarjetas (si hay)
     index_path = Path("docs/index.html")
-    items = []
-    for img in sorted(OUT_DIR.glob("*.png")):
-        items.append(f'<div class="card"><img src="./cards/{img.name}" alt="{img.stem}"><div class="t">{img.stem}</div></div>')
-    html = f"""<!doctype html>
+    if generadas:
+        items = []
+        for f in sorted(CARDS_DIR.glob("*.png")):
+            items.append(f'<div class="card"><img src="./cards/{f.name}" alt="{f.stem}"><div class="t">{f.stem}</div></div>')
+        html = f"""<!doctype html>
 <html lang="es">
 <head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
@@ -175,13 +189,13 @@ h1{{margin:0 0 8px 0}} p{{margin:4px 0 16px 0;color:#475569}}
 <h1>Industria y Empresa</h1>
 <p>Último valor y variación % vs periodo anterior (tarjetas generadas automáticamente).</p>
 <div class="grid">
-{''.join(items) if items else '<p>No se generaron tarjetas (¿faltan JSON en docs/data o no hay tablas de esa categoría?).</p>'}
+{''.join(items)}
 </div>
 </body></html>"""
-    index_path.write_text(html, encoding="utf-8")
-    print(f"[OK] Generadas {generated} tarjetas en {OUT_DIR}")
-    if generated == 0:
-        print("[WARN] No se generaron tarjetas. Revise que existan docs/data/<id>.json y que la categoría en el Excel sea exactamente 'Industria y Empresa'.")
+        index_path.write_text(html, encoding="utf-8")
+        print(f"[OK] Index generado con {generadas} tarjetas.")
+    else:
+        print("[WARN] No se generaron tarjetas.")
 
 if __name__ == "__main__":
     main()
