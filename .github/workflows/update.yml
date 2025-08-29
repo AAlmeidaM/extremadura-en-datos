@@ -2,17 +2,20 @@ name: Actualiza datos INE y publica JSON en docs/data
 
 on:
   schedule:
-    - cron: "0 6 * * *"     # cada día 06:00 UTC
+    - cron: "0 6 * * *"        # cada día 06:00 UTC
   workflow_dispatch:
 
 jobs:
   update:
     runs-on: ubuntu-latest
     permissions:
-      contents: write
+      contents: write          # imprescindible para poder pushear
 
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout (historial completo)
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0       # evita estados raros al commitear/pushear
 
       - name: Configurar Python
         uses: actions/setup-python@v5
@@ -25,30 +28,22 @@ jobs:
 
       - name: Ejecutar actualización (descarga INE + limpieza)
         env:
-          PYTHONPATH: ./scripts   # por si tu update_data.py hace `from ine_api import ...`
+          PYTHONPATH: ./scripts
         run: |
           set -e
           python scripts/update_data.py --excel "Datos Extremadura Mensual.xlsx"
 
-      # DEPURACIÓN: listar árbol completo
-      - name: Listar ficheros generados (debug)
+      - name: Verificar JSON generados (debug)
         run: |
-          echo "== Árbol del repo tras generar =="
-          ls -R
-
-      # COMPROBACIÓN: asegurar que existen JSON en data/processed
-      - name: Verificar JSON generados
-        run: |
-          echo "== Lista de JSON en data/processed =="
+          echo "== Lista en data/processed =="
           ls -l data/processed || true
           COUNT=$(ls data/processed/*.json 2>/dev/null | wc -l | xargs)
-          if [ "$COUNT" = "0" ] || [ -z "$COUNT" ]; then
+          if [ -z "$COUNT" ] || [ "$COUNT" = "0" ]; then
             echo "::error::No se han generado JSON en data/processed"
             exit 1
           fi
-          echo "OK: $COUNT JSON encontrados."
+          echo "OK: $COUNT JSON."
 
-      # COPIA: llevar JSON a docs/data (lo que sirve Pages)
       - name: Copiar JSON a docs/data
         run: |
           set -e
@@ -57,19 +52,29 @@ jobs:
           echo "== Contenido de docs/data =="
           ls -l docs/data
 
-      # COMMIT: confirmar que hay cambios y subirlos
-      - name: Mostrar estado git antes de commit
+      - name: Estado git antes de commit
         run: |
-          git status --porcelain
-          echo "--- fin status ---"
+          echo "== git status (antes) ==" && git status --porcelain || true
+          echo "== diff staged ==" && git diff --cached --name-only || true
+          echo "== diff working ==" && git diff --name-only || true
 
-      - name: Commit automático de JSON y /docs
-        uses: stefanzweifel/git-auto-commit-action@v5
-        with:
-          commit_message: "chore: publicar web en /docs y actualizar JSON"
-          file_pattern: |
-            data/processed/*.json
-            docs/data/*.json
-            docs/index.html
-            docs/css/**
-            docs/js/**
+      - name: Commit & push de JSON y web
+        run: |
+          set -e
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          # Añadir todo lo relevante
+          git add docs/data data/processed docs/index.html docs/css docs/js
+
+          # Si hay cambios, commit y push
+          if git diff --cached --quiet; then
+            echo "No hay cambios que commitear."
+          else
+            git commit -m "chore: publicar web en /docs y actualizar JSON"
+            git push origin HEAD:main
+          fi
+
+      - name: Estado git después de commit
+        run: |
+          echo "== git status (después) ==" && git status --porcelain || true
