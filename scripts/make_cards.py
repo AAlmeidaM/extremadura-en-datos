@@ -66,30 +66,31 @@ def pct_change(a, b):
     return (a - b) / b * 100.0
 
 def read_json(table_id):
-    """Lee docs/data/<id>.json en formato 'limpio' (period/value) o crudo INE (Fecha/Valor)."""
+    """
+    Lee docs/data/<id>.json en cualquiera de estos formatos:
+    - Lista de registros con period/value o Periodo/Valor o Fecha/Valor
+    - Objeto con clave 'Data' (dict)
+    - Lista con UN objeto que contiene 'Data' (list[dict])  <-- tu caso
+    Convierte Fecha epoch(ms) a 'YYYY-MM', limpia y ordena.
+    """
     f = DOCS_DATA / f"{table_id}.json"
     if not f.exists():
         return None
+
     try:
         data = json.loads(f.read_text(encoding="utf-8"))
     except Exception as e:
         print(f"[WARN] JSON inválido en {f.name}: {e}")
         return None
 
-    # Caso 1: ya viene como lista de registros con 'period' y 'value'
-    if isinstance(data, list) and data and isinstance(data[0], dict) and (
-        ("period" in data[0] and "value" in data[0]) or
-        ("Periodo" in data[0] and "Valor" in data[0]) or
-        ("Fecha" in data[0] and "Valor" in data[0])
-    ):
+    # Caso A: lista con dicts "planos"
+    if isinstance(data, list) and data and isinstance(data[0], dict) and not data[0].get("Data"):
         out = []
         for d in data:
-            # distintos nombres posibles
             per = d.get("period") or d.get("Periodo") or d.get("Fecha")
             val = d.get("value")  or d.get("Valor")
-            # Fecha puede venir en epoch (ms)
+            # epoch(ms) -> YYYY-MM
             if isinstance(per, (int, float)) and per > 10_000_000:
-                # epoch milisegundos -> YYYY-MM
                 per = datetime.utcfromtimestamp(float(per)/1000.0).strftime("%Y-%m")
             else:
                 per = normalize_period(per)
@@ -99,24 +100,30 @@ def read_json(table_id):
         out.sort(key=lambda x: x["period"])
         return out
 
-    # Caso 2: objeto con clave 'Data' (estilo wstempus)
+    # Caso B: dict con 'Data'
     if isinstance(data, dict) and "Data" in data and isinstance(data["Data"], list):
-        out = []
-        for it in data["Data"]:
-            per = it.get("Fecha") or it.get("Periodo") or it.get("period")
-            val = it.get("Valor")  or it.get("value")
-            if isinstance(per, (int, float)) and per > 10_000_000:
-                per = datetime.utcfromtimestamp(float(per)/1000.0).strftime("%Y-%m")
-            else:
-                per = normalize_period(per)
-            val = to_float(val)
-            if per and val is not None:
-                out.append({"period": per, "value": val})
-        out.sort(key=lambda x: x["period"])
-        return out
+        seq = data["Data"]
+    # Caso C: lista con un dict que tiene 'Data'  <-- tu ejemplo
+    elif isinstance(data, list) and len(data) == 1 and isinstance(data[0], dict) and "Data" in data[0]:
+        seq = data[0]["Data"]
+    else:
+        print(f"[WARN] Estructura no reconocida en {f.name}.")
+        return None
 
-    print(f"[WARN] Estructura no reconocida en {f.name}. Se omite.")
-    return None
+    # Normalizar secuencia 'Data'
+    out = []
+    for it in seq:
+        per = it.get("Fecha") or it.get("Periodo") or it.get("period")
+        val = it.get("Valor")  or it.get("value")
+        if isinstance(per, (int, float)) and per > 10_000_000:
+            per = datetime.utcfromtimestamp(float(per)/1000.0).strftime("%Y-%m")
+        else:
+            per = normalize_period(per)
+        val = to_float(val)
+        if per and val is not None:
+            out.append({"period": per, "value": val})
+    out.sort(key=lambda x: x["period"])
+    return out
 
 
 def draw_card(title, last_period, last_value, delta_pct, outfile):
@@ -166,7 +173,7 @@ def ids_from_excel(excel_path):
 
     # Filtrado robusto por categoría ("industria" en cualquier parte)
     cat = df["Categoría"].apply(normalize_text)
-    mask = cat.str.contains(r"\bindustria\b")
+    mask = cat.str.contains(r"\bindustria\b|\bempresa\b", regex=True)
     df_ie = df.loc[mask, ["table_id", "Métricas"]].drop_duplicates()
     ids = [(str(r["table_id"]), str(r["Métricas"])) for _, r in df_ie.iterrows()]
     print(f"[INFO] IDs Industria y Empresa encontrados en Excel: {len(ids)}")
