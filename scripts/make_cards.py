@@ -132,7 +132,7 @@ def main():
     df["table_id"] = df["URL"].apply(extract_id)
 
     # Filtrar categoría (ajusta el texto exacto si en tu Excel está con otras mayúsculas/acentos)
-    mask = df["Categoría"].astype(str).str.strip().str.lower().eq("industria y empresa")
+    mask = df["Categoría"].astype(str).str.strip().str.lower().eq("Industria y Empresa")
     df_ie = df.loc[mask & df["table_id"].astype(bool), ["table_id", "Métricas"]].drop_duplicates()
 
     generated = 0
