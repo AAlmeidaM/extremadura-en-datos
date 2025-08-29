@@ -65,18 +65,59 @@ def pct_change(a, b):
         return None
     return (a - b) / b * 100.0
 
-def read_json_records(table_id):
+def read_json(table_id):
+    """Lee docs/data/<id>.json en formato 'limpio' (period/value) o crudo INE (Fecha/Valor)."""
     f = DOCS_DATA / f"{table_id}.json"
     if not f.exists():
         return None
-    with open(f, "r", encoding="utf-8") as fh:
-        data = json.load(fh)
-    for d in data:
-        d["period"] = normalize_period(d.get("period"))
-        d["value"]  = to_float(d.get("value"))
-    data = [d for d in data if d.get("value") is not None and d.get("period")]
-    data.sort(key=lambda x: x["period"])
-    return data
+    try:
+        data = json.loads(f.read_text(encoding="utf-8"))
+    except Exception as e:
+        print(f"[WARN] JSON inválido en {f.name}: {e}")
+        return None
+
+    # Caso 1: ya viene como lista de registros con 'period' y 'value'
+    if isinstance(data, list) and data and isinstance(data[0], dict) and (
+        ("period" in data[0] and "value" in data[0]) or
+        ("Periodo" in data[0] and "Valor" in data[0]) or
+        ("Fecha" in data[0] and "Valor" in data[0])
+    ):
+        out = []
+        for d in data:
+            # distintos nombres posibles
+            per = d.get("period") or d.get("Periodo") or d.get("Fecha")
+            val = d.get("value")  or d.get("Valor")
+            # Fecha puede venir en epoch (ms)
+            if isinstance(per, (int, float)) and per > 10_000_000:
+                # epoch milisegundos -> YYYY-MM
+                per = datetime.utcfromtimestamp(float(per)/1000.0).strftime("%Y-%m")
+            else:
+                per = normalize_period(per)
+            val = to_float(val)
+            if per and val is not None:
+                out.append({"period": per, "value": val})
+        out.sort(key=lambda x: x["period"])
+        return out
+
+    # Caso 2: objeto con clave 'Data' (estilo wstempus)
+    if isinstance(data, dict) and "Data" in data and isinstance(data["Data"], list):
+        out = []
+        for it in data["Data"]:
+            per = it.get("Fecha") or it.get("Periodo") or it.get("period")
+            val = it.get("Valor")  or it.get("value")
+            if isinstance(per, (int, float)) and per > 10_000_000:
+                per = datetime.utcfromtimestamp(float(per)/1000.0).strftime("%Y-%m")
+            else:
+                per = normalize_period(per)
+            val = to_float(val)
+            if per and val is not None:
+                out.append({"period": per, "value": val})
+        out.sort(key=lambda x: x["period"])
+        return out
+
+    print(f"[WARN] Estructura no reconocida en {f.name}. Se omite.")
+    return None
+
 
 def draw_card(title, last_period, last_value, delta_pct, outfile):
     W, H = 1000, 560
