@@ -74,6 +74,24 @@ jobs:
             git commit -m "chore: publicar web en /docs y actualizar JSON"
             git push origin HEAD:main
           fi
+      - name: Generar tarjetas (Industria y Empresa)
+        run: |
+          python scripts/make_cards.py
+
+      - name: Commit & push de cards y web
+        run: |
+          set -e
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add docs/cards docs/index.html
+          if git diff --cached --quiet; then
+            echo "No hay cambios que commitear (cards)."
+          else
+            git commit -m "build(cards): actualizar tarjetas Industria y Empresa"
+            git push origin HEAD:main
+          fi
+
+          
 
       - name: Estado git después de commit
         run: |
